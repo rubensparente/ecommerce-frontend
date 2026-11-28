@@ -2,27 +2,34 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const ProductCard = ({ id, image, name, category, price, priceDiscount }) => {
-  const discountPct =
+  const formatBRL = (value) =>
+    `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
+
+  const discountPercent =
     priceDiscount && price > priceDiscount
       ? Math.round(((price - priceDiscount) / price) * 100)
       : null;
 
   return (
-    <Link to={`/product/${id}`} className="product-card">
+    <Link to={`/produto/${id}`} className="product-card">
       <div className="product-card-img-wrap">
-        {discountPct && <span className="discount-badge">{discountPct}% OFF</span>}
+        {discountPercent && (
+          <span className="discount-badge">{discountPercent}% OFF</span>
+        )}
         <img src={image} alt={name} />
       </div>
+
       {category && <span className="product-card-category">{category}</span>}
       <h3 className="product-card-name">{name}</h3>
+
       <div className="product-card-prices">
         {priceDiscount ? (
           <>
-            <span className="price-crossed">R$ {price.toFixed(2)}</span>
-            <span className="price-regular">R$ {priceDiscount.toFixed(2)}</span>
+            <span className="price-crossed">{formatBRL(price)}</span>
+            <span className="price-regular">{formatBRL(priceDiscount)}</span>
           </>
         ) : (
-          <span className="price-regular">R$ {price.toFixed(2)}</span>
+          <span className="price-regular">{formatBRL(price)}</span>
         )}
       </div>
     </Link>

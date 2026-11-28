@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from './Layout';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const formatCPF = (value) =>
   value
@@ -11,20 +12,23 @@ const formatCPF = (value) =>
     .replace(/(\d{3})(\d)/, '$1.$2')
     .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
 
-const formatPhone = (value) =>
-  value
-    .replace(/\D/g, '')
-    .slice(0, 11)
-    .replace(/^(\d{2})(\d)/, '($1) $2')
-    .replace(/(\d{5})(\d{1,4})$/, '$1-$2');
+const formatPhone = (value) => {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 10) {
+    return digits
+      .replace(/(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{4})(\d)/, '$1-$2');
+  }
+  return digits
+    .replace(/(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d)/, '$1-$2');
+};
 
 const formatCEP = (value) =>
   value
     .replace(/\D/g, '')
     .slice(0, 8)
     .replace(/(\d{5})(\d{1,3})$/, '$1-$2');
-
-const formatEmail = (value) => value.replace(/\s/g, '').toLowerCase();
 
 const formatCardNumber = (value) =>
   value
@@ -38,27 +42,18 @@ const formatCardExpiry = (value) =>
     .slice(0, 4)
     .replace(/(\d{2})(\d)/, '$1/$2');
 
-const formatCvv = (value) => value.replace(/\D/g, '').slice(0, 4);
-
-const fieldFormatters = {
-  cpf: formatCPF,
-  phone: formatPhone,
-  cep: formatCEP,
-  email: formatEmail,
-  cardNumber: formatCardNumber,
-  cardExpiry: formatCardExpiry,
-  cardCvv: formatCvv,
-};
+const formatCVV = (value) => value.replace(/\D/g, '').slice(0, 4);
 
 const CheckoutPage = () => {
-  const { items, subtotal, setLastOrder, clearCart } = useCart();
+  const { items, subtotal, addOrder, clearCart } = useCart();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [paymentMethod, setPaymentMethod] = useState('credit');
   const [form, setForm] = useState({
-    name: '',
+    name: user?.name || '',
     cpf: '',
-    email: '',
+    email: user?.email || '',
     phone: '',
     address: '',
     neighborhood: '',
@@ -71,31 +66,42 @@ const CheckoutPage = () => {
     cardCvv: '',
   });
 
-  const discount = subtotal > 0 ? 30.0 : 0;
-  const total = Math.max(0, subtotal - discount);
+  const shipping = 0;
+  const discount = 0;
+  const total = Math.max(0, subtotal + shipping - discount);
   const installment = (total / 10).toFixed(2).replace('.', ',');
 
   const formatBRL = (value) =>
-    `R$ ${value.toFixed(2).replace('.', ',')}`;
+    `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    const formattedValue = fieldFormatters[name]
-      ? fieldFormatters[name](value)
-      : value;
-    setForm({ ...form, [name]: formattedValue });
+    let formattedValue = value;
+
+    if (name === 'cpf') formattedValue = formatCPF(value);
+    if (name === 'phone') formattedValue = formatPhone(value);
+    if (name === 'cep') formattedValue = formatCEP(value);
+    if (name === 'cardNumber') formattedValue = formatCardNumber(value);
+    if (name === 'cardExpiry') formattedValue = formatCardExpiry(value);
+    if (name === 'cardCvv') formattedValue = formatCVV(value);
+    if (name === 'email') formattedValue = value.replace(/\s/g, '').toLowerCase();
+
+    setForm((prev) => ({ ...prev, [name]: formattedValue }));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    setLastOrder({
+
+    addOrder({
       ...form,
       paymentMethod,
       items,
       subtotal,
+      shipping,
       discount,
       total,
     });
+
     clearCart();
     navigate('/order-success');
   };
@@ -105,17 +111,19 @@ const CheckoutPage = () => {
       <div className="container checkout-page">
         <h1 className="checkout-title">Finalizar Compra</h1>
 
-        <form onSubmit={handleSubmit} className="checkout-grid">
-          {/* Coluna Esquerda */}
+        <form className="checkout-grid" onSubmit={handleSubmit}>
+          {/* Coluna Esquerda — Formulários */}
           <div>
-            {/* 1. Informações Pessoais */}
+            {/* Informações Pessoais */}
             <div className="card-box">
-              <h3 className="checkout-card-title">Informações Pessoais</h3>
+              <h2 className="checkout-card-title">Informações Pessoais</h2>
 
               <div className="form-field">
-                <label>Nome Completo *</label>
+                <label htmlFor="name">Nome Completo *</label>
                 <input
+                  id="name"
                   name="name"
+                  type="text"
                   placeholder="Insira seu nome"
                   value={form.name}
                   onChange={handleChange}
@@ -124,14 +132,14 @@ const CheckoutPage = () => {
               </div>
 
               <div className="form-field">
-                <label>CPF *</label>
+                <label htmlFor="cpf">CPF *</label>
                 <input
+                  id="cpf"
                   name="cpf"
+                  type="text"
                   inputMode="numeric"
-                  placeholder="000.000.000-00"
                   maxLength={14}
-                  pattern="\d{3}\.\d{3}\.\d{3}-\d{2}"
-                  title="Digite um CPF válido no formato 000.000.000-00"
+                  placeholder="000.000.000-00"
                   value={form.cpf}
                   onChange={handleChange}
                   required
@@ -139,11 +147,13 @@ const CheckoutPage = () => {
               </div>
 
               <div className="form-field">
-                <label>E-mail *</label>
+                <label htmlFor="email">E-mail *</label>
                 <input
+                  id="email"
                   name="email"
                   type="email"
-                  placeholder="exemplo@email.com"
+                  inputMode="email"
+                  placeholder="Insira seu email"
                   value={form.email}
                   onChange={handleChange}
                   required
@@ -151,15 +161,14 @@ const CheckoutPage = () => {
               </div>
 
               <div className="form-field">
-                <label>Celular *</label>
+                <label htmlFor="phone">Celular *</label>
                 <input
+                  id="phone"
                   name="phone"
                   type="tel"
                   inputMode="numeric"
-                  placeholder="(00) 00000-0000"
                   maxLength={15}
-                  pattern="\(\d{2}\)\s\d{5}-\d{4}"
-                  title="Digite um celular válido no formato (00) 00000-0000"
+                  placeholder="(00) 00000-0000"
                   value={form.phone}
                   onChange={handleChange}
                   required
@@ -167,14 +176,16 @@ const CheckoutPage = () => {
               </div>
             </div>
 
-            {/* 2. Informações de Entrega */}
+            {/* Informações de Entrega */}
             <div className="card-box">
-              <h3 className="checkout-card-title">Informações de Entrega</h3>
+              <h2 className="checkout-card-title">Informações de Entrega</h2>
 
               <div className="form-field">
-                <label>Endereço *</label>
+                <label htmlFor="address">Endereço *</label>
                 <input
+                  id="address"
                   name="address"
+                  type="text"
                   placeholder="Insira seu endereço"
                   value={form.address}
                   onChange={handleChange}
@@ -183,9 +194,11 @@ const CheckoutPage = () => {
               </div>
 
               <div className="form-field">
-                <label>Bairro *</label>
+                <label htmlFor="neighborhood">Bairro *</label>
                 <input
+                  id="neighborhood"
                   name="neighborhood"
+                  type="text"
                   placeholder="Insira seu bairro"
                   value={form.neighborhood}
                   onChange={handleChange}
@@ -194,9 +207,11 @@ const CheckoutPage = () => {
               </div>
 
               <div className="form-field">
-                <label>Cidade *</label>
+                <label htmlFor="city">Cidade *</label>
                 <input
+                  id="city"
                   name="city"
+                  type="text"
                   placeholder="Insira sua cidade"
                   value={form.city}
                   onChange={handleChange}
@@ -205,14 +220,14 @@ const CheckoutPage = () => {
               </div>
 
               <div className="form-field">
-                <label>CEP *</label>
+                <label htmlFor="cep">CEP *</label>
                 <input
+                  id="cep"
                   name="cep"
+                  type="text"
                   inputMode="numeric"
-                  placeholder="00000-000"
                   maxLength={9}
-                  pattern="\d{5}-\d{3}"
-                  title="Digite um CEP válido no formato 00000-000"
+                  placeholder="00000-000"
                   value={form.cep}
                   onChange={handleChange}
                   required
@@ -220,9 +235,11 @@ const CheckoutPage = () => {
               </div>
 
               <div className="form-field">
-                <label>Complemento</label>
+                <label htmlFor="complement">Complemento</label>
                 <input
+                  id="complement"
                   name="complement"
+                  type="text"
                   placeholder="Insira complemento"
                   value={form.complement}
                   onChange={handleChange}
@@ -230,9 +247,9 @@ const CheckoutPage = () => {
               </div>
             </div>
 
-            {/* 3. Informações de Pagamento */}
+            {/* Informações de Pagamento */}
             <div className="card-box">
-              <h3 className="checkout-card-title">Informações de Pagamento</h3>
+              <h2 className="checkout-card-title">Informações de Pagamento</h2>
 
               <div className="form-field">
                 <label>Forma de Pagamento</label>
@@ -243,9 +260,9 @@ const CheckoutPage = () => {
                       name="paymentMethod"
                       value="credit"
                       checked={paymentMethod === 'credit'}
-                      onChange={() => setPaymentMethod('credit')}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
                     />
-                    <span>Cartão de Crédito</span>
+                    Cartão de Crédito
                   </label>
 
                   <label className="payment-radio">
@@ -254,9 +271,9 @@ const CheckoutPage = () => {
                       name="paymentMethod"
                       value="boleto"
                       checked={paymentMethod === 'boleto'}
-                      onChange={() => setPaymentMethod('boleto')}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
                     />
-                    <span>Boleto Bancário</span>
+                    Boleto Bancário
                   </label>
                 </div>
               </div>
@@ -264,9 +281,11 @@ const CheckoutPage = () => {
               {paymentMethod === 'credit' && (
                 <>
                   <div className="form-field">
-                    <label>Nome do Cartão *</label>
+                    <label htmlFor="cardName">Nome do Cartão *</label>
                     <input
+                      id="cardName"
                       name="cardName"
+                      type="text"
                       placeholder="Insira o nome do Cartão"
                       value={form.cardName}
                       onChange={handleChange}
@@ -276,12 +295,14 @@ const CheckoutPage = () => {
 
                   <div className="form-row-2">
                     <div className="form-field">
-                      <label>Número do Cartão *</label>
+                      <label htmlFor="cardNumber">Número do Cartão *</label>
                       <input
+                        id="cardNumber"
                         name="cardNumber"
+                        type="text"
                         inputMode="numeric"
-                        placeholder="0000 0000 0000 0000"
                         maxLength={19}
+                        placeholder="0000 0000 0000 0000"
                         value={form.cardNumber}
                         onChange={handleChange}
                         required
@@ -289,14 +310,14 @@ const CheckoutPage = () => {
                     </div>
 
                     <div className="form-field">
-                      <label>Data de validade do Cartão *</label>
+                      <label htmlFor="cardExpiry">Data de validade do Cartão *</label>
                       <input
+                        id="cardExpiry"
                         name="cardExpiry"
+                        type="text"
                         inputMode="numeric"
-                        placeholder="MM/AA"
                         maxLength={5}
-                        pattern="\d{2}/\d{2}"
-                        title="Digite a validade no formato MM/AA"
+                        placeholder="MM/AA"
                         value={form.cardExpiry}
                         onChange={handleChange}
                         required
@@ -304,27 +325,27 @@ const CheckoutPage = () => {
                     </div>
                   </div>
 
-                  <div className="form-row-2">
-                    <div className="form-field">
-                      <label>CVV *</label>
-                      <input
-                        name="cardCvv"
-                        inputMode="numeric"
-                        placeholder="000"
-                        maxLength={4}
-                        value={form.cardCvv}
-                        onChange={handleChange}
-                        required
-                      />
-                    </div>
+                  <div className="form-field">
+                    <label htmlFor="cardCvv">CVV *</label>
+                    <input
+                      id="cardCvv"
+                      name="cardCvv"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      placeholder="CVV"
+                      value={form.cardCvv}
+                      onChange={handleChange}
+                      required
+                    />
                   </div>
                 </>
               )}
             </div>
 
-            {/* 4. Card Finalizar Compra (rodapé da coluna esquerda) */}
+            {/* Finalizar Compra (Rodapé do formulário) */}
             <div className="card-box">
-              <h3 className="checkout-card-title">Finalizar Compra</h3>
+              <h2 className="checkout-card-title">Finalizar Compra</h2>
 
               <div className="checkout-bottom-total">
                 <strong>Total</strong>
@@ -336,31 +357,31 @@ const CheckoutPage = () => {
                 </div>
               </div>
 
-              <button type="submit" className="warning-btn">
+              <button
+                type="submit"
+                className="warning-btn"
+                disabled={items.length === 0}
+              >
                 Realizar Pagamento
               </button>
             </div>
           </div>
 
-          {/* Coluna Direita — RESUMO */}
-          <aside className="card-box checkout-summary">
-            <h3 className="checkout-card-title">RESUMO</h3>
+          {/* Coluna Direita — Resumo */}
+          <aside className="card-box">
+            <h2 className="checkout-card-title">RESUMO</h2>
 
             <div className="summary-items">
-              {items.length === 0 ? (
-                <p style={{ fontSize: 14, color: 'var(--light-gray)' }}>
-                  Nenhum produto no carrinho.
-                </p>
-              ) : (
-                items.map((item, idx) => (
-                  <div className="summary-item" key={idx}>
-                    <div className="summary-item-thumb">
-                      <img src={item.image} alt={item.name} />
-                    </div>
-                    <span className="summary-item-name">{item.name}</span>
+              {items.map((item, idx) => (
+                <div className="summary-item" key={`${item.id}-${idx}`}>
+                  <div className="summary-item-thumb">
+                    <img src={item.image} alt={item.name} />
                   </div>
-                ))
-              )}
+                  <span className="summary-item-name">
+                    {item.name} {item.quantity > 1 ? `(x${item.quantity})` : ''}
+                  </span>
+                </div>
+              ))}
             </div>
 
             <div className="summary-rows">
@@ -370,7 +391,7 @@ const CheckoutPage = () => {
               </div>
               <div className="summary-row">
                 <span>Frete:</span>
-                <strong>R$ 0,00</strong>
+                <strong>{formatBRL(shipping)}</strong>
               </div>
               <div className="summary-row">
                 <span>Desconto:</span>
@@ -388,7 +409,11 @@ const CheckoutPage = () => {
               </p>
             </div>
 
-            <button type="submit" className="warning-btn">
+            <button
+              type="submit"
+              className="warning-btn"
+              disabled={items.length === 0}
+            >
               Realizar Pagamento
             </button>
           </aside>

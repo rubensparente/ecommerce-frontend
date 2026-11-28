@@ -4,6 +4,7 @@ const CartContext = createContext();
 
 const CART_STORAGE_KEY = 'digital_store_cart';
 const ORDER_STORAGE_KEY = 'digital_store_last_order';
+const ORDERS_LIST_KEY = 'digital_store_orders';
 
 const loadFromStorage = (key, fallback) => {
   try {
@@ -16,6 +17,7 @@ const loadFromStorage = (key, fallback) => {
 
 export const CartProvider = ({ children }) => {
   const [items, setItems] = useState(() => loadFromStorage(CART_STORAGE_KEY, []));
+  const [orders, setOrders] = useState(() => loadFromStorage(ORDERS_LIST_KEY, []));
   const [lastOrder, setLastOrder] = useState(() =>
     loadFromStorage(ORDER_STORAGE_KEY, null)
   );
@@ -25,12 +27,28 @@ export const CartProvider = ({ children }) => {
   }, [items]);
 
   useEffect(() => {
+    localStorage.setItem(ORDERS_LIST_KEY, JSON.stringify(orders));
+  }, [orders]);
+
+  useEffect(() => {
     if (lastOrder) {
       localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(lastOrder));
     } else {
       localStorage.removeItem(ORDER_STORAGE_KEY);
     }
   }, [lastOrder]);
+
+  const addOrder = (orderData) => {
+    const newOrder = {
+      ...orderData,
+      id: Date.now(),
+      orderNumber: `#${String(Date.now()).slice(-6)}`,
+      createdAt: new Date().toLocaleString('pt-BR'),
+      status: 'Pedido realizado',
+    };
+    setOrders((prev) => [newOrder, ...prev]);
+    setLastOrder(newOrder);
+  };
 
   const addToCart = (product) => {
     setItems((prev) => {
@@ -85,6 +103,8 @@ export const CartProvider = ({ children }) => {
     <CartContext.Provider
       value={{
         items,
+        orders,
+        addOrder,
         addToCart,
         updateQuantity,
         removeFromCart,

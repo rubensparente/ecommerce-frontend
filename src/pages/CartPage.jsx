@@ -4,10 +4,12 @@ import Layout from './Layout';
 import Section from '../components/Section';
 import ProductListing from '../components/ProductListing';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
 import { productsData } from '../data/products';
 
 const CartPage = () => {
   const { items, subtotal, updateQuantity, removeFromCart } = useCart();
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   const [coupon, setCoupon] = useState('');
@@ -19,7 +21,8 @@ const CartPage = () => {
   const total = Math.max(0, subtotal + shipping - discount);
   const installment = (total / 10).toFixed(2).replace('.', ',');
 
-  const formatBRL = (value) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
+  const formatBRL = (value) =>
+    `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`;
 
   const handleCepChange = (e) => {
     const formatted = e.target.value
@@ -34,6 +37,14 @@ const CartPage = () => {
     if (coupon.trim()) {
       setCouponApplied(true);
     }
+  };
+
+  const handleContinue = () => {
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: { pathname: '/checkout' } } });
+      return;
+    }
+    navigate('/checkout');
   };
 
   return (
@@ -214,7 +225,7 @@ const CartPage = () => {
               type="button"
               className="warning-btn"
               disabled={items.length === 0}
-              onClick={() => navigate('/checkout')}
+              onClick={handleContinue}
             >
               Continuar
             </button>
