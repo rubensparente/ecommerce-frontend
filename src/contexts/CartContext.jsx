@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useAuth } from './AuthContext';
 
 const CartContext = createContext();
 
@@ -16,8 +17,12 @@ const loadFromStorage = (key, fallback) => {
 };
 
 export const CartProvider = ({ children }) => {
+  const { user } = useAuth();
+
   const [items, setItems] = useState(() => loadFromStorage(CART_STORAGE_KEY, []));
-  const [orders, setOrders] = useState(() => loadFromStorage(ORDERS_LIST_KEY, []));
+  const [allOrders, setAllOrders] = useState(() =>
+    loadFromStorage(ORDERS_LIST_KEY, [])
+  );
   const [lastOrder, setLastOrder] = useState(() =>
     loadFromStorage(ORDER_STORAGE_KEY, null)
   );
@@ -27,8 +32,8 @@ export const CartProvider = ({ children }) => {
   }, [items]);
 
   useEffect(() => {
-    localStorage.setItem(ORDERS_LIST_KEY, JSON.stringify(orders));
-  }, [orders]);
+    localStorage.setItem(ORDERS_LIST_KEY, JSON.stringify(allOrders));
+  }, [allOrders]);
 
   useEffect(() => {
     if (lastOrder) {
@@ -45,10 +50,16 @@ export const CartProvider = ({ children }) => {
       orderNumber: `#${String(Date.now()).slice(-6)}`,
       createdAt: new Date().toLocaleString('pt-BR'),
       status: 'Pedido realizado',
+      userEmail: user?.email || orderData.email,
     };
-    setOrders((prev) => [newOrder, ...prev]);
+    setAllOrders((prev) => [newOrder, ...prev]);
     setLastOrder(newOrder);
   };
+
+  // Filtra apenas os pedidos do usuário logado
+  const orders = user
+    ? allOrders.filter((order) => order.userEmail === user.email)
+    : [];
 
   const addToCart = (product) => {
     setItems((prev) => {
